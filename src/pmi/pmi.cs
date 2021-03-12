@@ -14,6 +14,7 @@ using System.Runtime.Loader;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 class Util
 {
@@ -714,14 +715,16 @@ class Worker
     int badAssemblyCount;
     int nonAssemblyCount;
     bool compileAndInvokeCctorsFirst;
+    bool dumpTypes;
 
-    public Worker(Visitor v, bool cctorsFirst)
+    public Worker(Visitor v, bool cctorsFirst, bool dumpTypes)
     {
         visitor = v;
         goodAssemblyCount = 0;
         badAssemblyCount = 0;
         nonAssemblyCount = 0;
         compileAndInvokeCctorsFirst = cctorsFirst;
+        this.dumpTypes = dumpTypes;
     }
 
     private static BindingFlags BindingFlagsForCollectingAllMethodsOrCtors = (
@@ -967,12 +970,106 @@ class Worker
         return 0;
     }
 
+    class DefinedType
+    {
+        public string Name;
+        public string TypeName;
+        public bool isValueType;
+        public long Size;
+        public List<DefinedType> NestedTypes;
+
+        public string AsString()
+        {
+            List<string> strings = new List<string>();
+
+            string valueType = this.isValueType ? "struct" : "class";
+            int nestedCount = this.NestedTypes == null ? 0 : this.NestedTypes.Count;
+            strings.Add($"[{this.Name} ({valueType})]: [{this.TypeName}] Size: {this.Size}, nested types: {nestedCount}");
+
+            if (this.NestedTypes != null)
+            {
+                foreach (DefinedType type in this.NestedTypes)
+                {
+                    strings.Add($"- CHILD " + type.AsString());
+                }
+            }
+
+            return string.Join('\n', strings);
+        }
+    }
+
+    DefinedType GetDefinedType(Type type)
+    {
+        DefinedType rootType = new DefinedType();
+        rootType.isValueType = type.IsValueType;
+        rootType.Name = type.Name;
+        rootType.TypeName = type.GetType().Name;
+
+        // Update this as we find more types
+        rootType.Size = 0;
+        rootType.NestedTypes = new List<DefinedType>();
+
+        long pointerSize = IntPtr.Size;
+
+        var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        foreach (var field in fields)
+        {
+            var innerTypeFields = field.FieldType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field.FieldType.IsValueType && ((innerTypeFields.Length == 0) || (field.FieldType.AssemblyQualifiedName.IndexOf("System.") != -1 && innerTypeFields.Length == 1)))
+            {
+                // This is a primative
+
+                DefinedType valueType = new DefinedType();
+                valueType.Name = field.Name;
+                valueType.isValueType = field.FieldType.IsValueType;
+                
+                valueType.TypeName = field.FieldType.AssemblyQualifiedName;
+
+                long valueTypeSize = 0;
+                Type fieldType = field.FieldType;
+                
+                try
+                {
+                    valueTypeSize = Marshal.SizeOf(fieldType);
+                }
+                catch
+                {
+                    valueTypeSize = 0;
+                }
+
+                valueType.Size = valueTypeSize;
+                rootType.Size += valueTypeSize;
+
+                rootType.NestedTypes.Add(valueType);
+            }
+            else
+            {
+                var nestedFieldType = new DefinedType();
+                nestedFieldType.Name = field.Name;
+                nestedFieldType.TypeName = field.FieldType.AssemblyQualifiedName;
+                nestedFieldType.Size = pointerSize;
+                nestedFieldType.isValueType = field.FieldType.IsValueType;
+
+                rootType.NestedTypes.Add(nestedFieldType);
+                rootType.Size += nestedFieldType.Size;
+            }
+        }
+
+        return rootType;
+    }
+
     bool Work(Type type)
     {
         visitor.StartType(type);
         bool keepGoing = true;
         MethodBase[] methods = GetMethods(type);
         MethodBase cctor = null;
+
+        if (this.dumpTypes)
+        {
+            DefinedType definedType = GetDefinedType(type);
+            Console.WriteLine(definedType.AsString());
+        }
 
         if (compileAndInvokeCctorsFirst)
         {
@@ -1476,6 +1573,7 @@ class PrepareMethodinator
         }
 
         bool runCctors = command.IndexOf("CCTORS") > 0;
+        bool dumpTypes = command.IndexOf("DUMPTYPES") > 0;
         bool logTailCallDecisions = command.IndexOf("TAILCALLS") > 0;
         bool logInliningDecisions = command.IndexOf("INLINES") > 0;
 
@@ -1493,7 +1591,7 @@ class PrepareMethodinator
         using var eventListener =
             logTailCallDecisions || logInliningDecisions ? new JITDecisionEventListener() : null;
 
-        Worker w = new Worker(v, runCctors);
+        Worker w = new Worker(v, runCctors, dumpTypes);
         int result = 0;
         string msg = "a file";
 

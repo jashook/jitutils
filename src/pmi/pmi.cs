@@ -994,7 +994,7 @@ class Worker
                 }
             }
 
-            return string.Join('\n', strings);
+            return string.Join(Environment.NewLine, strings);
         }
     }
 

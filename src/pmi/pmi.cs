@@ -452,7 +452,7 @@ abstract class PrepareBase : CounterBase
             methodName = splitStr.Slice(0, endofMethodNameStart);
         }
 
-        if (useEnv && methodName.CompareTo(method.Name.AsSpan(), StringComparison.OrdinalIgnoreCase) == 0 && methodToDisasm.IndexOf(method.DeclaringType.Name) != -1)
+        if (!useEnv || (methodName.CompareTo(method.Name.AsSpan(), StringComparison.OrdinalIgnoreCase) == 0 && methodToDisasm.IndexOf(method.DeclaringType.Name) != -1))
         {
             try
             {
@@ -1088,6 +1088,8 @@ class Worker
         {
             DefinedType definedType = GetDefinedType(type);
             Console.WriteLine(definedType.AsString());
+
+            return true;
         }
 
         if (compileAndInvokeCctorsFirst)
@@ -1115,7 +1117,7 @@ class Worker
         {
             foreach (MethodBase methodBase in methods)
             {
-                if (methodToDisasm.IndexOf(methodBase.DeclaringType.Name) == -1)
+                if (methodToDisasm != null && methodToDisasm.IndexOf(methodBase.DeclaringType.Name) == -1)
                 {
                     continue;
                 }

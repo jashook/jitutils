@@ -14,6 +14,7 @@ using System.Runtime.Loader;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 class Util
 {
@@ -435,81 +436,100 @@ abstract class PrepareBase : CounterBase
     {
         TimeSpan elapsedFunc = TimeSpan.MinValue;
 
-        try
+        string methodToDisasm = Environment.GetEnvironmentVariable("COMPlus_JitDisasm");
+
+        bool useEnv = methodToDisasm != null;
+        ReadOnlySpan<char> methodName = null;
+
+        if (useEnv)
         {
-            DateTime startFunc = DateTime.Now;
-            GC.WaitForPendingFinalizers();
-            System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(method.MethodHandle);
-            elapsedFunc = DateTime.Now - startFunc;
+            
+            int methodNameStart = methodToDisasm.IndexOf(':') + 1;
+            ReadOnlySpan<char> splitStr = methodToDisasm.AsSpan(methodNameStart);
+
+            int endofMethodNameStart = splitStr.IndexOf('(');
+
+            methodName = splitStr.Slice(0, endofMethodNameStart);
         }
-        catch (System.EntryPointNotFoundException)
+
+        if (!useEnv || (methodName.CompareTo(method.Name.AsSpan(), StringComparison.OrdinalIgnoreCase) == 0 && methodToDisasm.IndexOf(method.DeclaringType.Name) != -1))
         {
-            Console.WriteLine();
-            Console.WriteLine($"EntryPointNotFoundException {type.FullName}::{method.Name}");
-        }
-        catch (System.BadImageFormatException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"BadImageFormatException {type.FullName}::{method.Name}");
-        }
-        catch (System.MissingMethodException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"MissingMethodException {type.FullName}::{method.Name}");
-        }
-        catch (System.ArgumentException e)
-        {
-            Console.WriteLine();
-            string msg = e.Message.Split(new char[] { '\r', '\n' })[0];
-            Console.WriteLine($"ArgumentException {type.FullName}::{method.Name} {msg}");
-        }
-        catch (System.IO.FileNotFoundException eFileNotFound)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"FileNotFoundException {type.FullName}::{method.Name}" +
-                $" - {eFileNotFound.FileName} ({eFileNotFound.Message})");
-        }
-        catch (System.DllNotFoundException eDllNotFound)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"DllNotFoundException {type.FullName}::{method.Name} ({eDllNotFound.Message})");
-        }
-        catch (System.TypeInitializationException eTypeInitialization)
-        {
-            Console.WriteLine();
-            Console.WriteLine("TypeInitializationException {type.FullName}::{method.Name}" +
-                $"{eTypeInitialization.TypeName} ({eTypeInitialization.Message})");
-        }
-        catch (System.Runtime.InteropServices.MarshalDirectiveException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"MarshalDirectiveException {type.FullName}::{method.Name}");
-        }
-        catch (System.TypeLoadException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"TypeLoadException {type.FullName}::{method.Name}");
-        }
-        catch (System.OverflowException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"OverflowException {type.FullName}::{method.Name}");
-        }
-        catch (System.InvalidProgramException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"InvalidProgramException {type.FullName}::{method.Name}");
-        }
-        catch (System.InvalidOperationException)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"InvalidOperationException {type.FullName}::{method.Name}");
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine();
-            Console.WriteLine($"Unknown exception {type.FullName}::{method.Name}");
-            Console.WriteLine(e);
+            try
+            {
+                DateTime startFunc = DateTime.Now;
+                GC.WaitForPendingFinalizers();
+                System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(method.MethodHandle);
+                elapsedFunc = DateTime.Now - startFunc;
+            }
+            catch (System.EntryPointNotFoundException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"EntryPointNotFoundException {type.FullName}::{method.Name}");
+            }
+            catch (System.BadImageFormatException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"BadImageFormatException {type.FullName}::{method.Name}");
+            }
+            catch (System.MissingMethodException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"MissingMethodException {type.FullName}::{method.Name}");
+            }
+            catch (System.ArgumentException e)
+            {
+                Console.WriteLine();
+                string msg = e.Message.Split(new char[] { '\r', '\n' })[0];
+                Console.WriteLine($"ArgumentException {type.FullName}::{method.Name} {msg}");
+            }
+            catch (System.IO.FileNotFoundException eFileNotFound)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"FileNotFoundException {type.FullName}::{method.Name}" +
+                    $" - {eFileNotFound.FileName} ({eFileNotFound.Message})");
+            }
+            catch (System.DllNotFoundException eDllNotFound)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"DllNotFoundException {type.FullName}::{method.Name} ({eDllNotFound.Message})");
+            }
+            catch (System.TypeInitializationException eTypeInitialization)
+            {
+                Console.WriteLine();
+                Console.WriteLine("TypeInitializationException {type.FullName}::{method.Name}" +
+                    $"{eTypeInitialization.TypeName} ({eTypeInitialization.Message})");
+            }
+            catch (System.Runtime.InteropServices.MarshalDirectiveException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"MarshalDirectiveException {type.FullName}::{method.Name}");
+            }
+            catch (System.TypeLoadException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"TypeLoadException {type.FullName}::{method.Name}");
+            }
+            catch (System.OverflowException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"OverflowException {type.FullName}::{method.Name}");
+            }
+            catch (System.InvalidProgramException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"InvalidProgramException {type.FullName}::{method.Name}");
+            }
+            catch (System.InvalidOperationException)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"InvalidOperationException {type.FullName}::{method.Name}");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"Unknown exception {type.FullName}::{method.Name}");
+                Console.WriteLine(e);
+            }
         }
 
         return elapsedFunc;
@@ -714,14 +734,16 @@ class Worker
     int badAssemblyCount;
     int nonAssemblyCount;
     bool compileAndInvokeCctorsFirst;
+    bool dumpTypes;
 
-    public Worker(Visitor v, bool cctorsFirst)
+    public Worker(Visitor v, bool cctorsFirst, bool dumpTypes)
     {
         visitor = v;
         goodAssemblyCount = 0;
         badAssemblyCount = 0;
         nonAssemblyCount = 0;
         compileAndInvokeCctorsFirst = cctorsFirst;
+        this.dumpTypes = dumpTypes;
     }
 
     private static BindingFlags BindingFlagsForCollectingAllMethodsOrCtors = (
@@ -967,12 +989,108 @@ class Worker
         return 0;
     }
 
+    class DefinedType
+    {
+        public string Name;
+        public string TypeName;
+        public bool isValueType;
+        public long Size;
+        public List<DefinedType> NestedTypes;
+
+        public string AsString()
+        {
+            List<string> strings = new List<string>();
+
+            string valueType = this.isValueType ? "struct" : "class";
+            int nestedCount = this.NestedTypes == null ? 0 : this.NestedTypes.Count;
+            strings.Add($"[{this.Name} ({valueType})]: [{this.TypeName}] Size: {this.Size}, nested types: {nestedCount}");
+
+            if (this.NestedTypes != null)
+            {
+                foreach (DefinedType type in this.NestedTypes)
+                {
+                    strings.Add($"- CHILD " + type.AsString());
+                }
+            }
+
+            return string.Join(Environment.NewLine, strings);
+        }
+    }
+
+    DefinedType GetDefinedType(Type type)
+    {
+        DefinedType rootType = new DefinedType();
+        rootType.isValueType = type.IsValueType;
+        rootType.Name = type.Name;
+        rootType.TypeName = type.GetType().Name;
+
+        // Update this as we find more types
+        rootType.Size = 0;
+        rootType.NestedTypes = new List<DefinedType>();
+
+        long pointerSize = IntPtr.Size;
+
+        var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        foreach (var field in fields)
+        {
+            var innerTypeFields = field.FieldType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field.FieldType.IsValueType && ((innerTypeFields.Length == 0) || (field.FieldType.AssemblyQualifiedName.IndexOf("System.") != -1 && innerTypeFields.Length == 1)))
+            {
+                // This is a primative
+
+                DefinedType valueType = new DefinedType();
+                valueType.Name = field.Name;
+                valueType.isValueType = field.FieldType.IsValueType;
+                
+                valueType.TypeName = field.FieldType.AssemblyQualifiedName;
+
+                long valueTypeSize = 0;
+                Type fieldType = field.FieldType;
+                
+                try
+                {
+                    valueTypeSize = Marshal.SizeOf(fieldType);
+                }
+                catch
+                {
+                    valueTypeSize = 0;
+                }
+
+                valueType.Size = valueTypeSize;
+                rootType.Size += valueTypeSize;
+
+                rootType.NestedTypes.Add(valueType);
+            }
+            else
+            {
+                var nestedFieldType = new DefinedType();
+                nestedFieldType.Name = field.Name;
+                nestedFieldType.TypeName = field.FieldType.AssemblyQualifiedName;
+                nestedFieldType.Size = pointerSize;
+                nestedFieldType.isValueType = field.FieldType.IsValueType;
+
+                rootType.NestedTypes.Add(nestedFieldType);
+                rootType.Size += nestedFieldType.Size;
+            }
+        }
+
+        return rootType;
+    }
+
     bool Work(Type type)
     {
         visitor.StartType(type);
         bool keepGoing = true;
         MethodBase[] methods = GetMethods(type);
         MethodBase cctor = null;
+
+        if (this.dumpTypes)
+        {
+            DefinedType definedType = GetDefinedType(type);
+            Console.WriteLine(definedType.AsString());
+
+            return true;
+        }
 
         if (compileAndInvokeCctorsFirst)
         {
@@ -993,10 +1111,17 @@ class Worker
             }
         }
 
+        string methodToDisasm = Environment.GetEnvironmentVariable("COMPlus_JitDisasm");
+
         if (keepGoing)
         {
             foreach (MethodBase methodBase in methods)
             {
+                if (methodToDisasm != null && methodToDisasm.IndexOf(methodBase.DeclaringType.Name) == -1)
+                {
+                    continue;
+                }
+
                 if (methodBase == cctor)
                 {
                     continue;
@@ -1476,6 +1601,7 @@ class PrepareMethodinator
         }
 
         bool runCctors = command.IndexOf("CCTORS") > 0;
+        bool dumpTypes = command.IndexOf("DUMPTYPES") > 0;
         bool logTailCallDecisions = command.IndexOf("TAILCALLS") > 0;
         bool logInliningDecisions = command.IndexOf("INLINES") > 0;
 
@@ -1493,7 +1619,7 @@ class PrepareMethodinator
         using var eventListener =
             logTailCallDecisions || logInliningDecisions ? new JITDecisionEventListener() : null;
 
-        Worker w = new Worker(v, runCctors);
+        Worker w = new Worker(v, runCctors, dumpTypes);
         int result = 0;
         string msg = "a file";
 
